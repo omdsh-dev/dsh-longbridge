@@ -30,9 +30,11 @@ function promote(source, destination, backup) {
     return
   }
 
+  // Atomic exchange where the toolchain supports it (coreutils >= 9.5);
+  // otherwise fall back to the backup-swap path below.
   if (process.platform === 'linux') {
-    run('mv', ['--exchange', '-T', source, destination])
-    return
+    const exchange = spawnSync('mv', ['--exchange', '-T', source, destination], { stdio: 'ignore', cwd: root })
+    if (exchange.status === 0) return
   }
 
   try {
