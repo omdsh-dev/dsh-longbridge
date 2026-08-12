@@ -1,19 +1,22 @@
 /**
  * Longbridge client half: the `settings.section` page and the experimental
  * right-side panel controller. The panel mounts only while the
- * `longbridge.panel.enabled` setting is on.
+ * `longbridge.panel.enabled` setting is on (read through our own RPC-backed
+ * config store — the DSH settings transport does not serve third-party
+ * namespaces).
  * @module
  */
 
 import { Component, createElement, useEffect, useSyncExternalStore, type ErrorInfo, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
-import type { ClientContext, SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import { getConfigSnapshot, refreshConfig, subscribeConfig } from './config-store.ts'
 import { LongbridgePanel } from './LongbridgePanel.tsx'
-import { LongbridgeSettings, type LongbridgeConfigView } from './LongbridgeSettings.tsx'
+import { LongbridgeSettings } from './LongbridgeSettings.tsx'
 
-export const inject = ['slots', 'connection', 'settingsScope']
+export const inject = ['slots', 'connection']
 
 class PanelBoundary extends Component<{ children: ReactNode }, { error: string | undefined }> {
   state: { error: string | undefined } = { error: undefined }
@@ -34,39 +37,26 @@ class PanelBoundary extends Component<{ children: ReactNode }, { error: string |
   }
 }
 
-function PanelController(props: { connection: ConnectionHandle; scope: SettingsScope<LongbridgeConfigView> }) {
-  const scope = props.scope
-  const snapshot = useSyncExternalStore(
-    callback => scope.subscribe(callback),
-    () => scope.getSnapshot(),
-  )
-  const enabled = snapshot.status === 'ready' && snapshot.value?.panel.enabled === true
+function PanelController(props: { connection: ConnectionHandle }) {
+  const snapshot = useSyncExternalStore(subscribeConfig, getConfigSnapshot)
+  const enabled = snapshot.config?.panel.enabled === true
   useEffect(() => {
-    if (snapshot.status === 'ready' && snapshot.value !== undefined && snapshot.value.panel.enabled === false) {
-      document.documentElement.style.removeProperty('--dsh-longbridge-panel-width')
-    }
-  }, [snapshot])
+    void refreshConfig(props.connection)
+    if (!enabled) document.documentElement.style.removeProperty('--dsh-longbridge-panel-width')
+  }, [props.connection, enabled])
   if (!enabled) return null
   return createElement(LongbridgePanel, { connection: props.connection })
 }
 
 export function apply(ctx: ClientContext): void {
   const connection = ctx.get('connection') as unknown as ConnectionHandle
-  const settingsScope = ctx.get('settingsScope')
-  if (settingsScope === undefined) {
-    throw new Error('dsh-longbridge: settingsScope service is unavailable (is @deepseek-ai/dsh-client-ui-settings mounted?)')
-  }
-  const scope = settingsScope.bind<LongbridgeConfigView>({ namespace: 'longbridge' })
 
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: 'longbridge',
     order: 45,
     label: () => '长桥',
-    inject: () => ({
-      connection,
-      scope,
-    }),
+    inject: () => ({ connection }),
   }, LongbridgeSettings))
 
   ctx.effect(() => {
@@ -75,7 +65,7 @@ export function apply(ctx: ClientContext): void {
     host.setAttribute('data-dsh-longbridge-panel', '')
     document.body.appendChild(host)
     root = createRoot(host)
-    root.render(createElement(PanelBoundary, null, createElement(PanelController, { connection, scope })))
+    root.render(createElement(PanelBoundary, null, createElement(PanelController, { connection })))
     return () => {
       root?.unmount()
       host.remove()

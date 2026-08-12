@@ -11,7 +11,8 @@ export const LONGBRIDGE_RPC_CHANNEL = '/longbridge'
 export async function callRpc<T = unknown>(
   connection: ConnectionHandle, endpoint: string, payload?: unknown, signal?: AbortSignal,
 ): Promise<T> {
-  const result = await connection.rpc.call(LONGBRIDGE_RPC_CHANNEL, endpoint, payload, signal)
+  // The wire envelope requires a JSON payload object; undefined is invalid.
+  const result = await connection.rpc.call(LONGBRIDGE_RPC_CHANNEL, endpoint, payload ?? {}, signal)
   if (!result.ok) throw new Error(`长桥 RPC ${endpoint} 失败：${result.error.message}`)
   return result.value as T
 }

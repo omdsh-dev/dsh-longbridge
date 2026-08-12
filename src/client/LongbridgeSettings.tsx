@@ -1,24 +1,18 @@
 /**
  * Longbridge settings section: credentials form (App Key/Secret triplet),
  * tool-group switches, live/paper environment, connection probe, and the
- * experimental panel flag. Credentials travel through the `/longbridge`
- * RPC channel into the DSH credential vault — never into settings storage.
+ * experimental panel flag. All config reads/writes travel the `/longbridge`
+ * RPC channel (the DSH settings transport does not serve third-party
+ * namespaces); credentials go into the DSH credential vault, never settings.
  * @module
  */
 
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import { getConfigSnapshot, refreshConfig, subscribeConfig, updateConfig } from './config-store.ts'
 import { callRpc } from './rpc.ts'
 import css from './LongbridgeSettings.module.css'
-
-/** Client view of the `longbridge` settings namespace. */
-export interface LongbridgeConfigView {
-  tools: { market: boolean; account: boolean; trading: boolean }
-  env: 'live' | 'paper'
-  panel: { enabled: boolean }
-}
 
 interface CredentialInfo {
   name: string
@@ -36,7 +30,6 @@ interface ProbeResult {
 
 type Props = PropsRuntime<'settings.section'> & {
   connection: ConnectionHandle
-  scope: SettingsScope<LongbridgeConfigView>
 }
 
 const CREDENTIAL_LABELS: ReadonlyMap<string, string> = new Map([
@@ -46,12 +39,8 @@ const CREDENTIAL_LABELS: ReadonlyMap<string, string> = new Map([
 ])
 
 export function LongbridgeSettings(props: Props) {
-  const scope = props.scope
-  const snapshot = useSyncExternalStore(
-    callback => scope.subscribe(callback),
-    () => scope.getSnapshot(),
-  )
-  const config = snapshot.value
+  const snapshot = useSyncExternalStore(subscribeConfig, getConfigSnapshot)
+  const config = snapshot.config
   const [credentials, setCredentials] = useState<CredentialInfo[] | null>(null)
   const [form, setForm] = useState({ appKey: '', appSecret: '', accessToken: '' })
   const [busy, setBusy] = useState(false)
@@ -66,7 +55,10 @@ export function LongbridgeSettings(props: Props) {
       setNotice(error instanceof Error ? error.message : String(error))
     }
   }
-  useEffect(() => { void refreshDescribe() }, [props.connection])
+  useEffect(() => {
+    void refreshConfig(props.connection)
+    void refreshDescribe()
+  }, [props.connection])
 
   const saveCredentials = async (): Promise<void> => {
     setBusy(true)
@@ -118,14 +110,12 @@ export function LongbridgeSettings(props: Props) {
     }
   }
 
-  const setEnv = (env: 'live' | 'paper'): void => { void props.scope.set('env', env) }
+  const setEnv = (env: 'live' | 'paper'): void => { void updateConfig(props.connection, { env }).catch(() => {}) }
   const setTool = (group: 'market' | 'account' | 'trading', enabled: boolean): void => {
-    if (config === undefined) return
-    void props.scope.set('tools', { ...config.tools, [group]: enabled })
+    if (config === null) return
+    void updateConfig(props.connection, { tools: { ...config.tools, [group]: enabled } }).catch(() => {})
   }
-  const setPanel = (enabled: boolean): void => { void props.scope.set('panel', { enabled }) }
-
-  const unavailable = snapshot.status === 'unavailable'
+  const setPanel = (enabled: boolean): void => { void updateConfig(props.connection, { panel: { enabled } }).catch(() => {}) }
 
   return (
     <section className={css.section}>
@@ -176,9 +166,11 @@ export function LongbridgeSettings(props: Props) {
       )}
 
       <h2 className={css.groupTitle}>环境与工具开关</h2>
-      {unavailable
-        ? <p className={css.hint}>设置存储当前不可用（远端浏览器不支持回环设置）。</p>
-        : config !== undefined && (
+      {config === null
+        ? <p className={snapshot.error !== null ? css.probeFail : css.hint}>
+          {snapshot.error !== null ? `读取配置失败：${snapshot.error}` : '读取配置中…'}
+        </p>
+        : (
           <>
             <div className={css.row}>
               <span>环境</span>
