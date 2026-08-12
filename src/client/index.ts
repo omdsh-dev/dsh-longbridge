@@ -35,7 +35,11 @@ class PanelBoundary extends Component<{ children: ReactNode }, { error: string |
 }
 
 function PanelController(props: { connection: ConnectionHandle; scope: SettingsScope<LongbridgeConfigView> }) {
-  const snapshot = useSyncExternalStore(props.scope.subscribe, props.scope.getSnapshot)
+  const scope = props.scope
+  const snapshot = useSyncExternalStore(
+    callback => scope.subscribe(callback),
+    () => scope.getSnapshot(),
+  )
   const enabled = snapshot.status === 'ready' && snapshot.value?.panel.enabled === true
   useEffect(() => {
     if (snapshot.status === 'ready' && snapshot.value !== undefined && snapshot.value.panel.enabled === false) {

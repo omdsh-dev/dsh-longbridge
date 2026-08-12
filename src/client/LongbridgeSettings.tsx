@@ -46,7 +46,11 @@ const CREDENTIAL_LABELS: ReadonlyMap<string, string> = new Map([
 ])
 
 export function LongbridgeSettings(props: Props) {
-  const snapshot = useSyncExternalStore(props.scope.subscribe, props.scope.getSnapshot)
+  const scope = props.scope
+  const snapshot = useSyncExternalStore(
+    callback => scope.subscribe(callback),
+    () => scope.getSnapshot(),
+  )
   const config = snapshot.value
   const [credentials, setCredentials] = useState<CredentialInfo[] | null>(null)
   const [form, setForm] = useState({ appKey: '', appSecret: '', accessToken: '' })
