@@ -203,7 +203,7 @@ export function LongbridgeSettings(props: Props) {
       <h2 className={css.groupTitle}>关于</h2>
       <p className={css.hint}>
         dsh-longbridge v0.1.0 · 数据源：Longbridge OpenAPI（港美股 + 券商级账户/交易）。
-        A 股行情请使用 dsh-stock-market。⚠ 内测插件，仅组织内可见，请勿外传。
+        A 股行情请使用 dsh-stock-market。
       </p>
     </section>
   )
