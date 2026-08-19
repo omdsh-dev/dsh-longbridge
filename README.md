@@ -1,5 +1,7 @@
 # dsh-longbridge
 
+**Author / Maintainer:** [@Zacklinkk](https://github.com/Zacklinkk)
+
 DSH 长桥（Longbridge）港美股数据接入插件：券商级行情、账户与交易工具 + 设置页凭据管理。
 
 
